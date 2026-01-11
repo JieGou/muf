@@ -1,21 +1,28 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Windows.Data;
 using System.Windows.Input;
+using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.Command;
 using MonitoredUndo;
 
 namespace WpfUndoSampleMVVM.Core
 {
-    public class MainWindowViewModel : INotifyPropertyChanged, ISupportsUndo
+    /// <summary>
+    /// The view model for the main window, providing undo/redo functionality and other bound properties.
+    /// </summary>
+    public class MainWindowViewModel : ViewModelBase, ISupportsUndo
     {
         private CommandBindingCollection _commandBindings = new CommandBindingCollection();
         
-        private ICommand _windowLoadedCommand;
         private ICommand _sliderMouseDownCommand;
         private ICommand _sliderLostMouseCapture;
 
+        /// <summary>
+        /// Gets the collection of command bindings for the view.
+        /// </summary>
         public CommandBindingCollection RegisterCommandBindings
         {
             get
@@ -24,19 +31,18 @@ namespace WpfUndoSampleMVVM.Core
             }
         }
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="MainWindowViewModel"/> class.
+        /// </summary>
         public MainWindowViewModel()
         {
             InitialiseCommandBindings();
         }
 
-        public ICommand WindowLoadedCommand
-        {
-            get
-            {
-                return _windowLoadedCommand ?? (_windowLoadedCommand = new RelayCommand(OnWindowLoaded));
-            }
-        }
-
+        /// <summary>
+        /// Gets the command that handles the slider mouse down event.
+        /// Used to start a batch of changes.
+        /// </summary>
         public ICommand SliderMouseDownCommand
         {
             get
@@ -45,6 +51,10 @@ namespace WpfUndoSampleMVVM.Core
             }
         }
 
+        /// <summary>
+        /// Gets the command that handles the slider lost mouse capture event.
+        /// Used to end a batch of changes.
+        /// </summary>
         public ICommand SliderLostMouseCapture
         {
             get
@@ -53,6 +63,11 @@ namespace WpfUndoSampleMVVM.Core
             }
         }
 
+        /// <summary>
+        /// Handles the MouseUp or LostMouseCapture event for the slider.
+        /// Ends the current batch of changes so they are treated as a single undoable unit.
+        /// </summary>
+        /// <param name="e">The event arguments.</param>
         private void OnSliderLostMouseCapture(MouseEventArgs e)
         {
             if (!BatchAgeChanges)
@@ -63,6 +78,11 @@ namespace WpfUndoSampleMVVM.Core
             e.Handled = false;
         }
 
+        /// <summary>
+        /// Handles the MouseDown event for the slider.
+        /// Starts a new batch of changes to group continuous updates (like dragging a slider) into a single undo unit.
+        /// </summary>
+        /// <param name="e">The mouse button event arguments.</param>
         private void OnSliderMouseDown(MouseButtonEventArgs e)
         {
             if (!BatchAgeChanges)
@@ -80,37 +100,16 @@ namespace WpfUndoSampleMVVM.Core
             e.Handled = false;
         }
 
-        private void OnWindowLoaded()
-        {
-            // The undo / redo stack collections are not "Observable", so we 
-            // need to manually refresh the UI when they change.
-            var root = UndoService.Current[this];
-            root.UndoStackChanged += new EventHandler(OnUndoStackChanged);
-            root.RedoStackChanged += new EventHandler(OnRedoStackChanged);
-            //FirstNameTextbox.Focus();
-        }
-
-        // Refresh the UI when the undo stack changes.
-        void OnUndoStackChanged(object sender, EventArgs e)
-        {
-            RefreshUndoStackList();
-        }
-
-        // Refresh the UI when the redo stack changes.
-        void OnRedoStackChanged(object sender, EventArgs e)
-        {
-            RefreshUndoStackList();
-        }
-
-        
-
         // Below are properties bound to the UI with a XAML binding.
         // NOTE that these properly implement INotifyPropertyChange.
         //  This is critical if the UI is going to stay in sync
         //  with the changes to the data.
 
-
         private string _FirstName;
+        /// <summary>
+        /// Gets or sets the first name.
+        /// Changes to this property are recorded in the undo system.
+        /// </summary>
         public string FirstName
         {
             get { return _FirstName; }
@@ -122,15 +121,19 @@ namespace WpfUndoSampleMVVM.Core
                 // Store this change in the Undo system.
                 // This uses the "DefaultChangeFactory" to construct the change, but you can 
                 // store changes any way you like.
-                DefaultChangeFactory.Current.OnChanging(this, "FirstName", _FirstName, value, "First Name Changed");
+                DefaultChangeFactory.Current.OnChanging(this, nameof(FirstName), _FirstName, value, "First Name Changed");
 
                 _FirstName = value;
-                OnPropertyChanged("FirstName"); // Tells the UI that this property has changed.
-                OnPropertyChanged("FullName");  // If FirstName changes, then FullName is also affected.
+                RaisePropertyChanged(nameof(FirstName)); // Tells the UI that this property has changed.
+                RaisePropertyChanged(nameof(FullName));  // If FirstName changes, then FullName is also affected.
             }
         }
 
         private string _LastName;
+        /// <summary>
+        /// Gets or sets the last name.
+        /// Changes to this property are recorded in the undo system.
+        /// </summary>
         public string LastName
         {
             get { return _LastName; }
@@ -142,14 +145,17 @@ namespace WpfUndoSampleMVVM.Core
                 // Store this change in the Undo system.
                 // This uses the "DefaultChangeFactory" to construct the change, but you can 
                 // store changes any way you like.
-                DefaultChangeFactory.Current.OnChanging(this, "LastName", _LastName, value, "Last Name Changed");
+                DefaultChangeFactory.Current.OnChanging(this, nameof(LastName), _LastName, value, "Last Name Changed");
 
                 _LastName = value;
-                OnPropertyChanged("LastName");  // Tells the UI that this property changed.
-                OnPropertyChanged("FullName");  // If LastName changes, then FullName is also affected.
+                RaisePropertyChanged(nameof(LastName));  // Tells the UI that this property changed.
+                RaisePropertyChanged(nameof(FullName));  // If LastName changes, then FullName is also affected.
             }
         }
 
+        /// <summary>
+        /// Gets the full name, which is a combination of First Name and Last Name.
+        /// </summary>
         public string FullName
         {
             get
@@ -158,8 +164,11 @@ namespace WpfUndoSampleMVVM.Core
             }
         }
 
-
         private int _Age;
+        /// <summary>
+        /// Gets or sets the age.
+        /// Changes to this property are recorded in the undo system.
+        /// </summary>
         public int Age
         {
             get { return _Age; }
@@ -171,15 +180,18 @@ namespace WpfUndoSampleMVVM.Core
                 // Store this change in the Undo system.
                 // This uses the "DefaultChangeFactory" to construct the change, but you can 
                 // store changes any way you like.
-                DefaultChangeFactory.Current.OnChanging(this, "Age", _Age, value, "Age Changed");
+                DefaultChangeFactory.Current.OnChanging(this, nameof(Age), _Age, value, "Age Changed");
 
                 _Age = value;
-                OnPropertyChanged("Age");
+                RaisePropertyChanged(nameof(Age));
             }
         }
 
-
         private bool _BatchAgeChanges = true;
+        /// <summary>
+        /// Gets or sets a value indicating whether age changes should be batched.
+        /// If true, continuous changes (like dragging a slider) will be grouped into a single undo step.
+        /// </summary>
         public bool BatchAgeChanges
         {
             get { return _BatchAgeChanges; }
@@ -189,49 +201,14 @@ namespace WpfUndoSampleMVVM.Core
                     return;
 
                 _BatchAgeChanges = value;
-                OnPropertyChanged("BatchAgeChanges");
+                RaisePropertyChanged(nameof(BatchAgeChanges));
             }
         }
 
-
-        // Expose the undo and redo stacks to the UI for binding.
-
-        public IEnumerable<ChangeSet> UndoStack
-        {
-            get
-            {
-                return UndoService.Current[this].UndoStack;
-
-            }
-        }
-
-        public IEnumerable<ChangeSet> RedoStack
-        {
-            get
-            {
-                return UndoService.Current[this].RedoStack;
-
-            }
-        }
-
-        
-
-        
-
-        // Refresh the UI when the undo / redo stacks change.
-        private void RefreshUndoStackList()
-        {
-            // Calling refresh on the CollectionView will tell the UI to rebind the list.
-            // If the list were an ObservableCollection, or implemented INotifyCollectionChanged, this would not be needed.
-            var cv = CollectionViewSource.GetDefaultView(UndoStack);
-            cv.Refresh();
-
-            cv = CollectionViewSource.GetDefaultView(RedoStack);
-            cv.Refresh();
-        }
-
-        
-
+        /// <summary>
+        /// Initializes the command bindings for Undo and Redo operations.
+        /// Registers these bindings with the CommandManager for this class.
+        /// </summary>
         private void InitialiseCommandBindings()
         {
             // create command binding for undo command
@@ -246,6 +223,12 @@ namespace WpfUndoSampleMVVM.Core
             CommandBindings.Add(redoBinding);
         }
 
+        /// <summary>
+        /// Executed when the Redo command is invoked.
+        /// Calls the UndoService to perform the redo operation.
+        /// </summary>
+        /// <param name="sender">The command sender.</param>
+        /// <param name="e">The execution event arguments.</param>
         private void RedoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             // A shorthand version of the above call to Undo, except 
@@ -253,12 +236,24 @@ namespace WpfUndoSampleMVVM.Core
             UndoService.Current[this].Redo();
         }
 
+        /// <summary>
+        /// Determines whether the Redo command can currently execute.
+        /// Checks the UndoService to see if a redo is possible.
+        /// </summary>
+        /// <param name="sender">The command sender.</param>
+        /// <param name="e">The can-execute event arguments.</param>
         private void RedoCanExecute(object sender, CanExecuteRoutedEventArgs e)
         {
             // Tell the UI whether Redo is available.
             e.CanExecute = UndoService.Current[this].CanRedo;
         }
 
+        /// <summary>
+        /// Executed when the Undo command is invoked.
+        /// Calls the UndoService to perform the undo operation.
+        /// </summary>
+        /// <param name="sender">The command sender.</param>
+        /// <param name="e">The execution event arguments.</param>
         private void UndoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             // Get the document root. In this case, we pass in "this", which 
@@ -272,12 +267,21 @@ namespace WpfUndoSampleMVVM.Core
             undoRoot.Undo();
         }
 
+        /// <summary>
+        /// Determines whether the Undo command can currently execute.
+        /// Checks the UndoService to see if an undo is possible.
+        /// </summary>
+        /// <param name="sender">The command sender.</param>
+        /// <param name="e">The can-execute event arguments.</param>
         private void UndoCanExecute(object sender, CanExecuteRoutedEventArgs e)
         {
             // Tell the UI whether Undo is available.
             e.CanExecute = UndoService.Current[this].CanUndo;
         }
 
+        /// <summary>
+        /// Gets the collection of command bindings.
+        /// </summary>
         public CommandBindingCollection CommandBindings
         {
             get
@@ -286,83 +290,14 @@ namespace WpfUndoSampleMVVM.Core
             }
         }
 
-
-        
-
         /// <summary>
-        /// The PropertyChanged event is used by consuming code
-        /// (like WPF's binding infrastructure) to detect when
-        /// a value has changed.
+        /// Implementation of ISupportsUndo.
+        /// Returns the root object of the undo document hierarchy.
         /// </summary>
-        public event PropertyChangedEventHandler PropertyChanged;
-
-        /// <summary>
-        /// Raise the PropertyChanged event for the 
-        /// specified property.
-        /// </summary>
-        /// <param name="propertyName">
-        /// A string representing the name of 
-        /// the property that changed.</param>
-        /// <remarks>
-        /// Only raise the event if the value of the property 
-        /// has changed from its previous value</remarks>
-        protected void OnPropertyChanged(string propertyName)
-        {
-            // Validate the property name in debug builds
-            VerifyProperty(propertyName);
-
-            if (null != PropertyChanged)
-            {
-                PropertyChanged(this, new PropertyChangedEventArgs(propertyName));
-            }
-        }
-
-        /// <summary>
-        /// Verifies whether the current class provides a property with a given
-        /// name. This method is only invoked in debug builds, and results in
-        /// a runtime exception if the <see cref="OnPropertyChanged"/> method
-        /// is being invoked with an invalid property name. This may happen if
-        /// a property's name was changed but not the parameter of the property's
-        /// invocation of <see cref="OnPropertyChanged"/>.
-        /// </summary>
-        /// <param name="propertyName">The name of the changed property.</param>
-        [System.Diagnostics.Conditional("DEBUG")]
-        private void VerifyProperty(string propertyName)
-        {
-            Type type = this.GetType();
-
-            // Look for a *public* property with the specified name
-            System.Reflection.PropertyInfo pi = type.GetProperty(propertyName);
-            if (pi == null)
-            {
-                // There is no matching property - notify the developer
-                string msg = "OnPropertyChanged was invoked with invalid " +
-                                "property name {0}. {0} is not a public " +
-                                "property of {1}.";
-                msg = String.Format(msg, propertyName, type.FullName);
-                System.Diagnostics.Debug.Assert(false, msg);
-            }
-        }
-
-        
-   
-        
-
-        // This interface is needed on objects that are part of the 
-        // document hierarchy. It allows this object to be passed
-        // in to the UndoService.Current[] indexer.
-        // This method should return the "root" of the document.
-        // In this case, we are treating the window as the "root" of the 
-        // document. In other cases, the root might be your domain model.
-        //
-        // See the unit tests for a better example of how this comes into 
-        // use for a multi-object document hierarchy.
-
+        /// <returns>The current instance as the root.</returns>
         public object GetUndoRoot()
         {
             return this;
         }
-
-        
     }
 }
