@@ -2,13 +2,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Input;
-using MonitoredUndo;
+using WpfUndoControls.Abstractions;
 
 namespace WpfUndoControls
 {
     /// <summary>
     /// Undo button control with dropdown history list.
     /// Automatically manages the undo stack and provides a dropdown menu for batch undo operations.
+    /// Works with any undo/redo framework through the IUndoManager abstraction.
     /// </summary>
     public class UndoButton : UndoRedoButtonBase
     {
@@ -18,9 +19,9 @@ namespace WpfUndoControls
                 new FrameworkPropertyMetadata(typeof(UndoButton)));
         }
 
-        protected override IEnumerable<ChangeSet> GetStack(UndoRoot root)
+        protected override IEnumerable<IUndoItem> GetStack(IUndoManager manager)
         {
-            return root.UndoStack;
+            return manager.UndoStack;
         }
 
         protected override string GetActionVerb()
@@ -38,30 +39,20 @@ namespace WpfUndoControls
             return "·ÅÆú 1 ¸öÃüÁî";
         }
 
-        protected override void ExecuteSingle(UndoRoot root)
+        protected override void ExecuteSingle(IUndoManager manager)
         {
-            if (root.CanUndo)
-                root.Undo();
+            if (manager.CanUndo)
+                manager.Undo();
         }
 
-        protected override void ExecuteTo(UndoRoot root, ChangeSet target)
+        protected override void ExecuteTo(IUndoManager manager, IUndoItem target)
         {
-            var stack = root.UndoStack.ToList();
-            var index = stack.IndexOf(target);
-            if (index >= 0)
-            {
-                // Undo count = index + 1
-                for (int i = 0; i <= index; i++)
-                {
-                    if (root.CanUndo)
-                        root.Undo();
-                }
-            }
+            manager.UndoTo(target);
         }
 
-        protected override bool CanExecute(UndoRoot root)
+        protected override bool CanExecute(IUndoManager manager)
         {
-            return root.CanUndo;
+            return manager.CanUndo;
         }
 
         protected override ICommand GetDefaultCommand()

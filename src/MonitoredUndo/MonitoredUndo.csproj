@@ -34,4 +34,8 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\WpfUndoControls.Abstractions\WpfUndoControls.Abstractions.csproj" />
+  </ItemGroup>
+
 </Project>

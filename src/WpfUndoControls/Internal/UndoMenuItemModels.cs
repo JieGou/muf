@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
-using MonitoredUndo;
+using WpfUndoControls.Abstractions;
 
 namespace WpfUndoControls.Internal
 {
@@ -92,20 +92,20 @@ namespace WpfUndoControls.Internal
 
     /// <summary>
     /// Represents a single undoable or redoable item in the undo/redo dropdown menu.
-    /// Wraps a <see cref="ChangeSet"/> and provides properties for UI interaction, such as highlighting and command binding.
+    /// Wraps an <see cref="IUndoItem"/> and provides properties for UI interaction, such as highlighting and command binding.
     /// </summary>
     internal class UndoListItem : INotifyPropertyChanged
     {
         private bool _isHighlighted;
 
-        public UndoListItem(ChangeSet changeSet)
+        public UndoListItem(IUndoItem undoItem)
         {
-            ChangeSet = changeSet;
+            UndoItem = undoItem;
         }
 
-        public ChangeSet ChangeSet { get; }
+        public IUndoItem UndoItem { get; }
 
-        public string Description => ChangeSet.Description;
+        public string Description => UndoItem?.Description ?? string.Empty;
 
         public ICommand PreviewCommand { get; set; }
         

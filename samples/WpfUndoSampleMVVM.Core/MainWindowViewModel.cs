@@ -7,6 +7,8 @@ using System.Windows.Input;
 using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.Command;
 using MonitoredUndo;
+using MonitoredUndo.WpfIntegration;
+using WpfUndoControls.Abstractions;
 
 namespace WpfUndoSampleMVVM.Core
 {
@@ -16,7 +18,7 @@ namespace WpfUndoSampleMVVM.Core
     public class MainWindowViewModel : ViewModelBase, ISupportsUndo
     {
         private CommandBindingCollection _commandBindings = new CommandBindingCollection();
-        
+
         private ICommand _sliderMouseDownCommand;
         private ICommand _sliderLostMouseCapture;
 
@@ -30,6 +32,7 @@ namespace WpfUndoSampleMVVM.Core
                 return _commandBindings;
             }
         }
+        public IUndoManager UndoManager { get; }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="MainWindowViewModel"/> class.
@@ -37,6 +40,8 @@ namespace WpfUndoSampleMVVM.Core
         public MainWindowViewModel()
         {
             InitialiseCommandBindings();
+
+            UndoManager = MonitoredUndoManagerProvider.Instance.GetUndoManager(this);
         }
 
         /// <summary>
@@ -47,7 +52,7 @@ namespace WpfUndoSampleMVVM.Core
         {
             get
             {
-                return _sliderMouseDownCommand ??(_sliderMouseDownCommand = new RelayCommand<MouseButtonEventArgs>(OnSliderMouseDown));
+                return _sliderMouseDownCommand ?? (_sliderMouseDownCommand = new RelayCommand<MouseButtonEventArgs>(OnSliderMouseDown));
             }
         }
 

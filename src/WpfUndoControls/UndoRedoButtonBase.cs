@@ -7,7 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using GalaSoft.MvvmLight.Command;
-using MonitoredUndo;
+using WpfUndoControls.Abstractions;
 using WpfUndoControls.Internal;
 
 namespace WpfUndoControls
@@ -15,6 +15,7 @@ namespace WpfUndoControls
     /// <summary>
     /// Base class for Undo/Redo buttons with dropdown menu functionality.
     /// Handles all the common logic for managing undo/redo stacks and menu items.
+    /// Works with any undo/redo framework through the IUndoManager abstraction.
     /// </summary>
     [TemplatePart(Name = PartSplitElement, Type = typeof(UIElement))]
     [TemplatePart(Name = PartPopup, Type = typeof(Popup))]
@@ -62,7 +63,7 @@ namespace WpfUndoControls
             ItemsSource = _menuItems;
             
             _previewItemCommand = new RelayCommand<object>(PreviewItem);
-            _executeToItemCommand = new RelayCommand<ChangeSet>(ExecuteToItem);
+            _executeToItemCommand = new RelayCommand<IUndoItem>(ExecuteToItem);
             _closePopupCommand = new RelayCommand(CloseDropDown);
             _mainButtonCommand = new RelayCommand(ExecuteMainButton, CanExecuteMainButton);
             
@@ -79,6 +80,20 @@ namespace WpfUndoControls
                 typeof(object),
                 typeof(UndoRedoButtonBase),
                 new PropertyMetadata(null, OnUndoRootChanged));
+
+        public static readonly DependencyProperty UndoManagerProperty =
+            DependencyProperty.Register(
+                nameof(UndoManager),
+                typeof(IUndoManager),
+                typeof(UndoRedoButtonBase),
+                new PropertyMetadata(null, OnUndoManagerChanged));
+
+        public static readonly DependencyProperty UndoManagerProviderProperty =
+            DependencyProperty.Register(
+                nameof(UndoManagerProvider),
+                typeof(IUndoManagerProvider),
+                typeof(UndoRedoButtonBase),
+                new PropertyMetadata(null));
 
         public static readonly DependencyProperty ItemsSourceProperty =
             DependencyProperty.Register(
@@ -110,12 +125,35 @@ namespace WpfUndoControls
 
         /// <summary>
         /// Gets or sets the undo root object that implements ISupportsUndo.
-        /// The control will automatically subscribe to stack changes and update the menu.
+        /// The control will use the UndoManagerProvider to convert this to an IUndoManager.
+        /// For direct control, use the UndoManager property instead.
         /// </summary>
         public object UndoRoot
         {
             get => GetValue(UndoRootProperty);
             set => SetValue(UndoRootProperty, value);
+        }
+
+        /// <summary>
+        /// Gets or sets the undo manager that implements IUndoManager.
+        /// This is the preferred way to bind to custom undo/redo implementations.
+        /// If UndoRoot is set and UndoManagerProvider is available, this will be automatically populated.
+        /// </summary>
+        public IUndoManager UndoManager
+        {
+            get => (IUndoManager)GetValue(UndoManagerProperty);
+            set => SetValue(UndoManagerProperty, value);
+        }
+
+        /// <summary>
+        /// Gets or sets the provider that converts a root object to an IUndoManager.
+        /// This is required when using the UndoRoot property with framework-specific implementations.
+        /// For MonitoredUndo, use MonitoredUndoManagerProvider.
+        /// </summary>
+        public IUndoManagerProvider UndoManagerProvider
+        {
+            get => (IUndoManagerProvider)GetValue(UndoManagerProviderProperty);
+            set => SetValue(UndoManagerProviderProperty, value);
         }
 
         /// <summary>
@@ -163,7 +201,13 @@ namespace WpfUndoControls
         private static void OnUndoRootChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var button = (UndoRedoButtonBase)d;
-            button.HandleUndoRootChanged(e.OldValue, e.NewValue);
+            button.HandleUndoRootChanged(e.NewValue);
+        }
+
+        private static void OnUndoManagerChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var button = (UndoRedoButtonBase)d;
+            button.HandleUndoManagerChanged(e.OldValue as IUndoManager, e.NewValue as IUndoManager);
         }
 
         private static void OnClosePopupCommandChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -178,10 +222,24 @@ namespace WpfUndoControls
             button.HandleDropDownOpenChanged((bool)e.NewValue);
         }
 
-        private void HandleUndoRootChanged(object oldValue, object newValue)
+        private void HandleUndoRootChanged(object newValue)
         {
-            UnsubscribeFromStackEvents(oldValue);
-            SubscribeToStackEvents(newValue);
+            // Use provider to convert root to UndoManager
+            var provider = UndoManagerProvider;
+            if (provider != null && newValue != null)
+            {
+                UndoManager = provider.GetUndoManager(newValue);
+            }
+            else
+            {
+                UndoManager = null;
+            }
+        }
+
+        private void HandleUndoManagerChanged(IUndoManager oldManager, IUndoManager newManager)
+        {
+            UnsubscribeFromManagerEvents(oldManager);
+            SubscribeToManagerEvents(newManager);
             RefreshMenuItems();
             UpdateEnabledState();
         }
@@ -200,9 +258,9 @@ namespace WpfUndoControls
         #region Abstract Members - Template Method Pattern
 
         /// <summary>
-        /// Gets the stack of ChangeSets (UndoStack or RedoStack).
+        /// Gets the stack of IUndoItems (UndoStack or RedoStack).
         /// </summary>
-        protected abstract IEnumerable<ChangeSet> GetStack(UndoRoot root);
+        protected abstract IEnumerable<IUndoItem> GetStack(IUndoManager manager);
 
         /// <summary>
         /// Gets the action verb for this button (e.g., "放弃" or "重做").
@@ -220,19 +278,19 @@ namespace WpfUndoControls
         protected abstract string GetSingleActionText();
 
         /// <summary>
-        /// Executes the operation for a single ChangeSet.
+        /// Executes the operation for a single item.
         /// </summary>
-        protected abstract void ExecuteSingle(UndoRoot root);
+        protected abstract void ExecuteSingle(IUndoManager manager);
 
         /// <summary>
-        /// Executes the operation up to the specified ChangeSet.
+        /// Executes the operation up to the specified item.
         /// </summary>
-        protected abstract void ExecuteTo(UndoRoot root, ChangeSet target);
+        protected abstract void ExecuteTo(IUndoManager manager, IUndoItem target);
 
         /// <summary>
         /// Checks if the operation can be executed.
         /// </summary>
-        protected abstract bool CanExecute(UndoRoot root);
+        protected abstract bool CanExecute(IUndoManager manager);
 
         /// <summary>
         /// Gets the default command (ApplicationCommands.Undo or Redo).
@@ -472,16 +530,16 @@ namespace WpfUndoControls
         /// </summary>
         private bool CanExecuteMainButton()
         {
-            var undoRoot = GetUndoRoot();
-            return undoRoot != null && CanExecute(undoRoot);
+            var manager = UndoManager;
+            return manager != null && CanExecute(manager);
         }
 
         private void ExecuteSingleOperation()
         {
-            var undoRoot = GetUndoRoot();
-            if (undoRoot != null && CanExecute(undoRoot))
+            var manager = UndoManager;
+            if (manager != null && CanExecute(manager))
             {
-                ExecuteSingle(undoRoot);
+                ExecuteSingle(manager);
             }
         }
 
@@ -491,8 +549,8 @@ namespace WpfUndoControls
 
             switch (item)
             {
-                case UndoListItem undoListItem when undoListItem.ChangeSet != null:
-                    ExecuteToItem(undoListItem.ChangeSet);
+                case UndoListItem undoListItem when undoListItem.UndoItem != null:
+                    ExecuteToItem(undoListItem.UndoItem);
                     break;
 
                 case UndoListOption option:
@@ -514,12 +572,12 @@ namespace WpfUndoControls
             }
         }
 
-        private void ExecuteToItem(ChangeSet target)
+        private void ExecuteToItem(IUndoItem target)
         {
-            var undoRoot = GetUndoRoot();
-            if (undoRoot == null) return;
+            var manager = UndoManager;
+            if (manager == null) return;
 
-            ExecuteTo(undoRoot, target);
+            ExecuteTo(manager, target);
             CloseDropDown();
         }
 
@@ -527,22 +585,31 @@ namespace WpfUndoControls
 
         #region Stack Event Handling
 
+        private void SubscribeToManagerEvents(IUndoManager manager)
+        {
+            if (manager == null) return;
+
+            manager.UndoStackChanged += OnStackChanged;
+            manager.RedoStackChanged += OnStackChanged;
+        }
+
+        private void UnsubscribeFromManagerEvents(IUndoManager manager)
+        {
+            if (manager == null) return;
+
+            manager.UndoStackChanged -= OnStackChanged;
+            manager.RedoStackChanged -= OnStackChanged;
+        }
+
+        // Remove old MonitoredUndo-specific methods
         private void SubscribeToStackEvents(object root)
         {
-            var undoRoot = TryGetUndoRoot(root);
-            if (undoRoot == null) return;
-
-            undoRoot.UndoStackChanged += OnStackChanged;
-            undoRoot.RedoStackChanged += OnStackChanged;
+            // This is now handled by HandleUndoRootChanged
         }
 
         private void UnsubscribeFromStackEvents(object root)
         {
-            var undoRoot = TryGetUndoRoot(root);
-            if (undoRoot == null) return;
-
-            undoRoot.UndoStackChanged -= OnStackChanged;
-            undoRoot.RedoStackChanged -= OnStackChanged;
+            // This is now handled by HandleUndoManagerChanged
         }
 
         private void OnStackChanged(object sender, EventArgs e)
@@ -570,10 +637,10 @@ namespace WpfUndoControls
         {
             _menuItems.Clear();
 
-            var undoRoot = GetUndoRoot();
-            if (undoRoot == null) return;
+            var manager = UndoManager;
+            if (manager == null) return;
 
-            var stack = GetStack(undoRoot).ToList();
+            var stack = GetStack(manager).ToList();
             if (!stack.Any()) return;
 
             AddStackItems(stack);
@@ -581,11 +648,11 @@ namespace WpfUndoControls
             AddActionOption();
         }
 
-        private void AddStackItems(IEnumerable<ChangeSet> stack)
+        private void AddStackItems(IEnumerable<IUndoItem> stack)
         {
-            foreach (var changeSet in stack)
+            foreach (var undoItem in stack)
             {
-                _menuItems.Add(new UndoListItem(changeSet)
+                _menuItems.Add(new UndoListItem(undoItem)
                 {
                     PreviewCommand = _previewItemCommand,
                     ClickCommand = _executeToItemCommand
@@ -685,7 +752,7 @@ namespace WpfUndoControls
                 option.Label = $"{GetActionVerb()} {index + 1} 个命令";
                 option.IsCancel = false;
                 option.Command = _executeToItemCommand;
-                option.CommandParameter = item.ChangeSet;
+                option.CommandParameter = item.UndoItem;
             }
         }
 
@@ -700,16 +767,6 @@ namespace WpfUndoControls
         #endregion
 
         #region Helper Methods
-
-        private UndoRoot GetUndoRoot()
-        {
-            return TryGetUndoRoot(UndoRoot);
-        }
-
-        private static UndoRoot TryGetUndoRoot(object root)
-        {
-            return root != null ? UndoService.Current[root] : null;
-        }
 
         private void ToggleDropDown()
         {

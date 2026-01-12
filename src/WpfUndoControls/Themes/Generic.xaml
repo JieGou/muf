@@ -48,7 +48,7 @@
                     <i:InvokeCommandAction Command="{Binding PreviewCommand}" CommandParameter="{Binding}" />
                 </i:EventTrigger>
                 <i:EventTrigger EventName="MouseLeftButtonUp">
-                    <i:InvokeCommandAction Command="{Binding ClickCommand}" CommandParameter="{Binding ChangeSet}" />
+                    <i:InvokeCommandAction Command="{Binding ClickCommand}" CommandParameter="{Binding UndoItem}" />
                 </i:EventTrigger>
             </i:Interaction.Triggers>
             <TextBlock Padding="4" Text="{Binding Description}" />
